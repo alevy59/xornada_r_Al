@@ -34,6 +34,8 @@ FII - is kind of real estate investment in Brazil
 
 ## Popularity
 
+
+
 ::: r-stack
 ![](images/Investidores.png){.fragment width="450" height="450"}
 
@@ -85,27 +87,19 @@ ggplot(comp_ifix_selic) +
 ```
 :::
 
-## Metodolgia
+## Metodolgia {.smaller}
 
 ::: {#tabset2 .panel-tabset}
 ## Data
-
-::: {#fig-elephants layout-ncol="2"}
-![investors](images/Investidores.png){#fig-investhors width="350"}
-
-![Funds](images/fundos.png){#fig-Listed width="350" height="250"}
-
-Famous Elephants
-:::
 
 ## Packages
 
 ## Recepies
 :::
 
-## Discussão
+## Discussão {.smaller}
 
-tabset3 .panel-tabset}
+::: {#tabset3 .panel-tabset}
 
 ## Theory
 
@@ -113,8 +107,18 @@ tabset3 .panel-tabset}
 
 ## Ongoing Research
 
-## Conclusion
-
 -   Interst rates impact
 -   Sharpe Ratio
--   Limitations \_ Future studies
+-   Limitations, Future studies
+:::
+
+## Final Remarks
+
+## rascunho 1
+
+::: {#fig-fundos layout-ncol="2"}
+![investors](images/Investidores.png){#fig-investhors width="350"}
+
+![Funds](images/fundos.png){#fig-Listed width="350" height="250"}
+
+:::
