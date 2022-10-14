@@ -10,11 +10,11 @@ format:
   revealjs:
     theme: night
     chalkboard: true
-    incremental: true
+    incremental: false
     slide-number: true
     show-slide-number: print
     preview-links: auto
-    logo: xornada.png
+    logo: logo.png
     footer: <https://www.ppgad.uff.br/>
 date: '`r Sys.Date()`'
 ---
@@ -24,6 +24,7 @@ date: '`r Sys.Date()`'
 ::: {#tabset1 .panel-tabset}
 ## Context
 
+::: nonincremental
 FII - is kind of real estate investment in Brazil
 
 -   Monthly 95% dividend payments
@@ -31,37 +32,139 @@ FII - is kind of real estate investment in Brazil
 -   Growth by public offers
 
 -   Several categories
+:::
 
 ## Popularity
 
+```{r packages}
+#| echo: false
+#| message: false
+#| warning: false
+
+suppressMessages(library(tidyverse))
+#suppressMessages(library(lubridate))
+suppressMessages(library(readxl))
+#suppressMessages(library(highcharter))
+suppressMessages(library(tidyquant))
+suppressMessages(library(tibbletime))
+suppressMessages(library(quantmod))
+suppressMessages(library(PerformanceAnalytics))
+suppressMessages(library(scales))
+library(timetk)
+library(here)
+```
+
+::: {#graphic-1 layout-ncol="2"}
+```{r}
 
 
-::: r-stack
-![](images/Investidores.png){.fragment width="450" height="450"}
 
-![](images/fundos.png){.fragment top="50" width="450" height="450"}
+data_inv <-seq(as.Date("2009-12-31"), as.Date("2023-08-31"), by="years")#cria o vetor de datas
+
+investors <-as.numeric(c("12000","21000",
+                         "36000","102000",
+                         "101000","93000",
+                         "89000","89000",
+                         "121000","208000",
+                         "645000","1172000",
+                         "1546000","1837000"))
+
+n_investors<-data.frame(data_inv, investors) %>% 
+  mutate(t_investors=investors/1000)
+ggplot(n_investors) +
+  aes(x = data_inv, y = t_investors) +
+  geom_col(fill = "deepskyblue",position = ) +
+  geom_text(aes(label=t_investors),vjust=-0.2)+
+  labs(title = "Number of investors",
+       subtitle = "Evolution of the number of investors - custody position (Thousands)" ,
+       x="Year", y="Number of investor")+
+       ggthemes::theme_few()
+
+```
+
+```{r}
+#dataframe evolução anual dos FIIs
+
+date_fiis <-seq(as.Date("2017-12-31"), as.Date("2023-07-31"), by="years")
+
+Listed<-as.numeric(c("156","190",
+                     "250","311",
+                     "402","431"))
+
+Total<-as.numeric(c("333","381",
+                    "464","555",
+                    "697","756"))
+
+anual_fiis_ev<-data.frame(date_fiis,Listed,Total)#constroi o dataframe
+
+#deixa o dataframe na forma longa para apresentar os graficos de barra na forma empilhada
+an_fii_ev_plot<-pivot_longer(anual_fiis_ev,-date_fiis) 
+
+#Number of funds and primary market
+ g2<- ggplot(an_fii_ev_plot) +
+  aes(x = date_fiis, fill = name, y = value) +
+  geom_col(position = "dodge",stat='identity') +
+  ggfittext::geom_bar_text(position="dodge")+
+  scale_fill_manual(values = c(Listed= "lightblue",
+    Total = "deepskyblue")) +
+    labs(title = "Number of funds and primary market",
+    subtitle = "Yearly evolution of the number of FIIs" ,
+    x="Year", y="Total de fundos CVM / Total Funds CVM",fill="")+
+  ggthemes::theme_few()
+
+g2
+
+```
 :::
+
+<!-- ::: r-stack -->
+
+<!-- ![](images/Investidores.png){.fragment width="450" height="450"} -->
+
+<!-- ![](images/fundos.png){.fragment top="50" width="450" height="450"} -->
+
+<!-- ::: -->
 
 ## The problem
 
--   Maximize portfolio returns
+::: {#problem layout-ncol="2"}
+::: {.column width="60%"}
+-   Portfolio returns x risk
 
--   Verify interest rate impact
+    ![](images/frontier.png){width="526"}
+:::
+
+::: {.column width="30%"}
+-   Verify interest rate impact in portfolio selection
+:::
+:::
 
 ## Choices
 
--   liquidity
+::: {layout-ncol="2"}
+::: {.column width="50%"}
+liquidity
 
--   categories we left out
+financial volume mean \> 2MM R\$/ day
+
+![](images/liquidity.png)
+:::
+
+::: {.column width="50%"}
+categories we left out
+
+![](images/Hospitals%20(800%C2%A0%C3%97%C2%A0800%C2%A0px)%20(2).png){width="400"}
+:::
+:::
 
 ## 
 
 ```{r}
 #| echo: false
 suppressMessages(library(tidyverse))
-suppressMessages(library(lubridate))
+#suppressMessages(library(lubridate))
 suppressMessages(library(readxl))
-suppressMessages(library(highcharter))
+#suppressMessages(library(highcharter))
 suppressMessages(library(tidyquant))
 suppressMessages(library(tibbletime))
 suppressMessages(library(quantmod))
@@ -92,15 +195,54 @@ ggplot(comp_ifix_selic) +
 ::: {#tabset2 .panel-tabset}
 ## Data
 
+-   Yahoo finance - assets price - ohlc
+
+-   Profit - export - IFIX
+
+-   BACEN - SELIC daily close
+
+-   Categories classification - Clube FII
+
 ## Packages
 
+-   tidyverse \[4\], data wrangling
+
+-   lubridade\[5\], for general data manipulation,
+
+-   ggplot2\[7\], data visualization
+
+-   quantmode\[8\], for financial data vesting,
+
+-   tidyquant\[9\], for financial data vesting,
+
+-   PerformanceAnalitycs\[10\], manipulation, and computation.
+
+- timetk ,Manipulate data series
+
+- kableExtra , tables
+
 ## Recepies
+
+- Data vesting for listed FII & Selic
+
+- Filter by categories and criterium (liquidity)
+Resulting in more than 100 assets.
+
+- Exclude assets with inconsistent negotiation data or that do not participate in the IFIX index Lasting a set of 24 FII.
+
+- Generate n portfolio simulations using a uniform distribution,runif (). Assuring that each portfolio $sum(weights)= 1$ and all weights are positive.
+
+- Compute portfolios, returns, variance and Sharpe-ratio. 
+
+- Filter to obtain the portfolio of minimal variance, and the best Sharpe-ratio one.
+
+##
+
 :::
 
 ## Discussão {.smaller}
 
 ::: {#tabset3 .panel-tabset}
-
 ## Theory
 
 ## Hipothesys
@@ -114,11 +256,10 @@ ggplot(comp_ifix_selic) +
 
 ## Final Remarks
 
-## rascunho 1
+<!-- ## rascunho 1 -->
 
-::: {#fig-fundos layout-ncol="2"}
-![investors](images/Investidores.png){#fig-investhors width="350"}
+<!-- ::: {#fig-fundos layout-ncol="2"} -->
+<!-- ![investors](images/Investidores.png){#fig-investhors width="350"} -->
 
-![Funds](images/fundos.png){#fig-Listed width="350" height="250"}
-
-:::
+<!-- ![Funds](images/fundos.png){#fig-Listed width="350" height="250"} -->
+<!-- ::: -->

@@ -1,8 +1,9 @@
 ---
 title: "optmization_2022"
-author: "Marcus Antonio Cardoso Ramalho"
+author: "Marcus Antonio Cardoso Ramalho e Ariel Levy"
 date: "2022-10-02"
 output: html_document
+options: (scipen=999)
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(tidyquant) # To download the data
 library(plotly) # To create interactive charts
 library(timetk) # To manipulate the data series
@@ -20,19 +21,16 @@ library(tidyverse)
 library(kableExtra)
 ```
 
-```{r}
 
 
+```{r message=FALSE, warning=FALSE}
 portfolio <- read_delim("dados/carteira_final.txt")
 (tick<-portfolio$Ticker)
 ```
 
-#primeiros portfolio
+## primeiro portfolio
 
-```{r}
-
-
-
+```{r, warning=FALSE,message=FALSE}
 price_data <- tq_get(tick,
                      from = '2017-01-02',
                      to = '2019-12-31',
@@ -50,23 +48,178 @@ log_ret_tidy <- price_data %>%
                type = 'log')
 
 
-```
-
-```{r}
-
-# As you can see that this data is in tidy format. 
-#We will use the spread() function to convert it to a wide format. 
-#And we will also convert it into a time series object using xts() function.
+#passa o tibble para xts para juntar aos dados do IFIX
 log_ret_xts <- log_ret_tidy %>%
   spread(symbol, value = ret) %>%
   tk_xts()
 
-head(log_ret_xts)
+
+
+```
+
+## Preços do IFIX
+```{r preços ifix, message=FALSE, warning=FALSE, scipen=999}
+
+IFIX_diario_2012_2022 <- readxl::read_excel("IFIX_diario_2012_2022.xlsx", 
+    col_types = c("date", "numeric","text"))
+
+
+#convertendo em xts
+IFIX_diario_2017_2019<-tk_xts(IFIX_diario_2012_2022) %>% 
+  window(start="2016-12-29", end="2020-01-01")
+
+
+
+#calculo dos retornosdo IFIX
+log_ret_IFIX <-Return.calculate(IFIX_diario_2017_2019, 
+                   method = "log") %>% 
+                   na.omit() 
+
 
 ```
 
 
-```{r inicializacao_a}
+#Juntando log retornos diarios do IFIX com os log retornos dos ativos
+```{r}
+#usando a função cbind
+daily_asset_returns<-cbind(log_ret_xts,log_ret_IFIX) %>% 
+  na.omit()#precos do profit trouxeram feriados NA 
+
+```
+
+#Calculo da media dos log retornos diários
+```{r}
+mean_ret <- colMeans(daily_asset_returns)
+print(round(mean_ret, 5))
+```
+
+#Calculo da matriz de covariancia
+```{r}
+
+cov_mat <- cov(daily_asset_returns) * 252
+
+
+asset_beta<-cov_mat[nrow(cov_mat),]/cov_mat[nrow(cov_mat),ncol(cov_mat)]
+
+
+```
+
+
+Valores que serao passados para a funcao simulacao
+```{r}
+
+#num_port <- 6 #numero de simulações
+#Rfr<-0.02
+#
+
+
+```
+
+
+#Criando uma função para fazer as simulações
+```{r funcao simulacao}
+#Rfr - annual risk free rate in decimal notation
+# n_portifolios= 2 - number of portifolios simulations default = 2
+# assets_mean_returns - daily mean asset returns in decimal notation
+# cov_matrix = covariance matrix dimensions (number of tickers + 1 x number of tickers + 1) as we joined the market index.
+
+simulations=function(Rfr= 0.01 ,
+                     n_portifolios= 2,
+                     assets_mean_returns,
+                     cov_matrix){
+  
+#Inicialização de matrizes e vetores
+#matriz de pesos
+all_wts <- matrix(nrow = num_port,
+                  ncol = ncol(cov_mat))
+
+#Vetor para armazenar retornos do portifolio
+port_returns <- vector('numeric', num_port)
+
+#Vetor para armazenar o risco (std) do portifolio
+port_risk <- vector('numeric', num_port)
+
+#Vetor para armazenar sharpe ratio do portifolio
+sharpe_ratio <- vector('numeric', num_port)
+
+#vetor para armazenar o beta do portifolio
+port_beta<-vector('numeric', num_port)
+
+  for (i in 1:num_port) {
+  #set.seed(1234)
+  wts <- runif(nrow(cov_mat))
+  wts <- wts/sum(wts)
+  #Guarda os pesos dentro de uma matriz dos portifolios
+  all_wts[i,] <- wts
+
+  #Calcula os retornos do portifolio
+
+  port_ret <- sum(wts * mean_ret)
+  port_ret <- ((port_ret + 1)^252) - 1
+  
+  #Guarda os retornos dentro de uma matriz dos portifolios
+  port_returns[i] <- port_ret
+ 
+  # Calcula o risco do portifolio
+  port_sd <- sqrt(t(wts) %*% (cov_mat  %*% wts))
+  port_risk[i] <- port_sd
+  
+  # Creating and storing Portfolio Sharpe Ratios
+  
+  sr <- (port_ret-Rfr)/port_sd
+  sharpe_ratio[i] <- sr
+
+  #Asset_beta<-"cov(cada coluna;ultima linha)/cov(ultima coluna;ultima linha)"
+  beta_i <- sum(wts * asset_beta)
+  port_beta[i]<-beta_i
+  
+  } # end of loop
+
+  lista<-list("weights"=all_wts,
+              "return"=port_returns,
+              "risk"=port_risk,
+              "sharpe"=sharpe_ratio,
+              "beta"=port_beta)
+  
+return(lista)
+
+  }
+
+```
+
+
+```{r}
+
+Simula_0.02_10000<-simulation(Rfr=0.02,n_p)
+
+
+simulacao2<-simulations(Rfr,num_port,mean_ret,cov_mat)
+
+print(simulacao2)
+
+sum(is.na(simulacao2$pesos))
+
+```
+
+#Criando a tabela com port returns, risco, beta, sharpe 
+```{r}
+
+
+# Storing the values in the table
+portfolio_values <- tibble(Return = port_returns,
+                           Risk = port_risk,
+                           SharpeRatio = sharpe_ratio)
+
+all_wts <- tk_tbl(all_wts)
+
+colnames(all_wts) <- colnames(log_ret_xts)
+
+```
+
+
+
+
+```{r inicializacao_a, message=FALSE, warning=FALSE}
 #Next lets calculate the mean daily returns for each asset.
 mean_ret <- colMeans(log_ret_xts)
 print(round(mean_ret, 5))
@@ -78,6 +231,7 @@ cov_mat <- cov(log_ret_xts) * 252
 round(cov_mat,4)
 
 num_port <- 5000
+
 
 # Creating a matrix to store the weights
 
@@ -101,7 +255,7 @@ sharpe_ratio <- vector('numeric', length = num_port)
 
 ```
 
-```{r 2%_a}
+```{r 2%_a, message=FALSE, warning=FALSE}
 
 #Next lets run the for loop 5000 times.
 
@@ -208,7 +362,7 @@ sharpe_ratio <- vector('numeric', length = num_port)
 
 #Next lets run the for loop 5000 times.
 
-Rfr<-0.02
+Rfr<-0.13
 
 for (i in seq_along(port_returns)) {
   
@@ -243,10 +397,13 @@ for (i in seq_along(port_returns)) {
 
 ```{r 13%_b}
 
+
+
 # Storing the values in the table
 portfolio_values <- tibble(Return = port_returns,
                            Risk = port_risk,
-                           SharpeRatio = sharpe_ratio)
+                           SharpeRatio = sharpe_ratio,
+                           Slope=(port_returns-Rfr)/port_risk)
 
 
 # Converting matrix to a tibble and changing column names
@@ -263,8 +420,52 @@ portfolio_values <- tk_tbl(cbind(all_wts, portfolio_values))
 min_var <- portfolio_values[which.min(portfolio_values$Risk),]
 max_sr <- portfolio_values[which.max(portfolio_values$SharpeRatio),]
 
+
 ```
 
+
+```{r}
+
+
+
+p <- portfolio_values %>%
+  ggplot(aes(x = Risk, y = Return, color = SharpeRatio)) +
+  geom_point() +
+  theme_classic() +
+   scale_y_continuous(labels = scales::percent,expand = c(0, 0), limits = c(0, 0.3)) +
+  scale_x_continuous(labels = scales::percent,expand = c(0, 0), limits = c(0, 0.2)) +
+  labs(x = 'Annualized Risk',
+       y = 'Annualized Returns',
+       title = "Portfolio Optimization & Efficient Frontier") +
+  geom_point(aes(x = Risk,
+                 y = Return), data = min_var, color = 'red') +
+  geom_point(aes(x = Risk,
+                 y = Return), data = max_sr, color = 'red') +
+    annotate(geom = 'point', x = 0.2848399, y = 0.2534, color = 'red')+
+    annotate(geom = 'point', x = 0, y = 0.02, color = 'red')+
+    annotate(geom = 'segment', x = 0, xend = 0.2848399,  y = 0.02,
+         yend = 0.2534, color = 'red')
+    
+
+
+# mean(log_ret_IFIX$IFIX)
+# STDEV(log_ret_IFIX$IFIX)
+# mean(selic_hist_ts$SELIC)
+
+
+# +
+#   annotate('text', x = 0.20, y = 0.42, label = "Tangency Portfolio") +
+#   annotate('text', x = 0.18, y = 0.01, label = "Minimum variance portfolio") +
+#   annotate(geom = 'segment', x = 0.14, xend = 0.135,  y = 0.01, 
+#            yend = 0.06, color = 'red', arrow = arrow(type = "open")) +
+#   annotate(geom = 'segment', x = 0.22, xend = 0.2275,  y = 0.405, 
+#            yend = 0.365, color = 'red', arrow = arrow(type = "open"))
+  
+ggplotly(p)
+
+
+
+```
 
 ```{r}
 
@@ -302,6 +503,8 @@ table_comp_Sector2<-table_comp_Ticker %>%
   view(table_comp_Sector2)
   
 ```
+
+
 
 ```{r}
 
@@ -345,43 +548,168 @@ kable((table_risk_return_sharpe_by_port[1:3]), align=rep('c', 3)) %>%
 kable((table_comp_Sector2[1:4]), align=rep('c', 4)) %>% 
   kable_styling(full_width = F, position = "left")
 
-tbl_weightsb<-rio::import("tbl_weightsb.xlsx")
+tbl_weightsb<-rio::import("dados/tbl_weightsb.xlsx")
 #rio::export(table_comp_Sector2,"tbl_weights.xlsx")
 
 kable((tbl_weightsb[1:6]), align=rep('c', 6)) %>% 
   kable_styling(full_width = F, position = "left")
 
 ```
-```{r ifix}
 
-price_data_ifix <- tq_get("FIGS11.SA",
-                     from = '2017-01-02',
-                     to = '2019-12-31',
-                     get = 'stock.prices')
+# Comparativo selic
+```{r}
+#selic_hist<-rio::import("SELIC_HIST.xlsx")
 
-#Next we will calculate the daily returns for 
-#these stocks. We will use the logarithmic returns.
+selic_hist <- readxl::read_excel("dados/SELIC_HIST.xlsx", 
+    col_types = c("date", "numeric"))
 
-log_ret_tidy_ifix <- price_data_ifix %>%
-  group_by(symbol) %>%
-  tq_transmute(select = adjusted,
-               mutate_fun = periodReturn,
-               period = 'daily',
-               col_rename = 'ret',
-               type = 'log')
+IFIX_Mensal_2012_2022 <- readxl::read_excel("IFIX_Mensal_2012_2022.xlsx", 
+    col_types = c("date", "numeric"))
+
+IFIX_Mensal_2012_2022_ts<-tk_xts(IFIX_Mensal_2012_2022)
+
+IFIX_Mensal_2012_2022_ts <-
+  IFIX_Mensal_2012_2022_ts %>% 
+  to.monthly(indexAt = "lastof",
+             OHLC = FALSE) %>% 
+  window(start="2016-01-02", end="2019-12-31")
+  
+
+
+selic_hist_ts<-tk_xts(selic_hist)
+
+selic_hist_ts <- selic_hist_ts %>% 
+    to.yearly(indexAt = "lastof",
+               OHLC = FALSE) %>% 
+  window(start="2016-01-02", end="2019-12-31")
+
+
+log_ret_IFIX <-Return.calculate(IFIX_Mensal_2012_2022_ts, 
+                   method = "discrete") %>% 
+                   na.omit()  
+
+  
+mean(log_ret_IFIX$IFIX)
+
+
+comp_ifix_selic<-cbind(selic_hist_ts,
+                       log_ret_IFIX)
+
+comp_ifix_selic<-tk_tbl(comp_ifix_selic)
+
+comp_ifix_selic<-comp_ifix_selic %>% 
+  rename(date=index) %>% 
+  remove_rownames() %>% 
+  pivot_longer(names_to = "asset",values_to = "returns",-date) %>%
+
+ 
+  
+
+
+# rio::export(comp_ifix_selic,"comp_ifix_selic.xlsx")
+
+
+comp_ifix_selic <- readxl::read_excel("dados/comp_ifix_selic.xlsx",
+    col_types = c("date", "numeric", "text"))
+
+
+ggplot(comp_ifix_selic) +
+  aes(x = date, y = returns, colour = asset) +
+  geom_line(size = 0.5) +
+  scale_color_hue(direction = 1) +
+  theme_minimal()+
+  labs(title = "Comparative returns IFIX vs SELIC - 2013-2022")
+
+
+
+
+
+
 
 
 ```
 
+
+
+
+# Graficos B3
+
 ```{r}
 
-# As you can see that this data is in tidy format. 
-#We will use the spread() function to convert it to a wide format. 
-#And we will also convert it into a time series object using xts() function.
-log_ret_xts_ifix <- log_ret_tidy_ifix %>%
-  spread(symbol, value = ret) %>%
-  tk_xts()
+data_inv <-seq(as.Date("2009-12-31"), as.Date("2023-08-31"), by="years")#cria o vetor de datas
 
-head(log_ret_xts_ifix)
+investors <-as.numeric(c("12000","21000",
+                         "36000","102000",
+                         "101000","93000",
+                         "89000","89000",
+                         "121000","208000",
+                         "645000","1172000",
+                         "1546000","1837000"))
+
+print(investors)
+
+n_investors<-data.frame(data_inv, investors) %>% 
+  mutate(t_investors=investors/1000)
+
+#grafico de investidores
+g1<-ggplot(n_investors) +
+  aes(x = data_inv, y = t_investors) +
+  geom_col(fill = "deepskyblue" ) +
+  geom_text(aes(label=t_investors),vjust=-0.2)+
+  labs(title = "Number of investors",
+       subtitle = "Evolution of the number of investors - custody position (Thousands)" ,
+       x="Year", y="Number of investor")+
+       ggthemes::theme_few()
+
+#dataframe evolução anual dos FIIs
+
+date_fiis <-seq(as.Date("2017-12-31"), as.Date("2023-07-31"), by="years")
+
+Listed<-as.numeric(c("156","190",
+                     "250","311",
+                     "402","431"))
+
+Total<-as.numeric(c("333","381",
+                    "464","555",
+                    "697","756"))
+
+anual_fiis_ev<-data.frame(date_fiis,Listed,Total)#constroi o dataframe
+
+#deixa o dataframe na forma longa para apresentar os graficos de barra na forma empilhada
+an_fii_ev_plot<-pivot_longer(anual_fiis_ev,-date_fiis) 
+
+#Number of funds and primary market
+ g2<- ggplot(an_fii_ev_plot) +
+  aes(x = date_fiis, fill = name, y = value) +
+  geom_col(position = "dodge",stat='identity') +
+  ggfittext::geom_bar_text(position="dodge")+
+  scale_fill_manual(values = c(Listed= "lightblue",
+    Total = "deepskyblue")) +
+    labs(title = "Number of funds and primary market",
+    subtitle = "Yearly evolution of the number of FIIs" ,
+    x="Year", y="Total de fundos CVM / Total Funds CVM",fill="")+
+  ggthemes::theme_few()
+  
+ g1
+ g2
+
+  # ggplot(an_fii_ev_plot)+
+  # aes(date_fiis,value)+
+  # geom_col()+
+  # geom_text(aes(label=value),vjust=-0.2)+
+  # scale_fill_manual(
+  #     values = c(listed_fiis = "Lightblue",
+  #     total_fiis_cvm = "DarkBlue"))+
+  # labs(title = "Number of funds and primary market",
+  #      subtitle = "Yearly evolution of the number of FIIs" ,
+  #      x="Year", y="Total de fundos CVM / Total Funds CVM")+
+  #      ggthemes::theme_few()
+  
+  # ggplot(anual_fiis_ev)+
+#   geom_col(aes(x=date_fiis,y=total_fiis_cvm),fill="darkblue")+
+#   geom_bar(aes(x=date_fiis,weight=listed_fiis),fill="lightblue",position = "dodge")
+  # geom_text(aes(label=paste("(",total_fiis_cvm,",",listed_fiis,")"),hjust=-1,vjust=-1))
+
+
 ```
 
